@@ -70,9 +70,9 @@ export class WorldSimulation {
             }
         }
 
-        await Promise.all(Array(20).fill().map(() => this.spawnFish()));
-        await Promise.all(Array(10).fill().map(() => this.spawnRabbit()));
-        await Promise.all(Array(5).fill().map(() => this.spawnFox()));
+        //await Promise.all(Array(20).fill().map(() => this.spawnFish()));
+        //await Promise.all(Array(10).fill().map(() => this.spawnRabbit()));
+        await Promise.all(Array(10).fill().map(() => this.spawnFox()));
 
         console.log(`Spawning at ${this.cols}x${this.rows} world`);
     }
@@ -125,7 +125,7 @@ export class WorldSimulation {
 
         this.time++;
 
-        if (this.entities.fish.length === 0 && this.time % 10 === 0) {
+        /*if (this.entities.fish.length === 0 && this.time % 10 === 0) {
             console.log("Respawn fish.")
             for(let i = 0; i < 10; i++) this.spawnFish();
         }
@@ -133,9 +133,8 @@ export class WorldSimulation {
         if (this.entities.rabbits.length === 0 && this.time % 10 === 0) {
             console.log("Respawn rabbits.")
             for(let i = 0; i < 5; i++) this.spawnRabbit();
-        }
+        }*/
 
-        // Оптимизация проверки вымирания лис
         if (this.entities.foxes.length === 0 && this.time % 10 === 0) {
             console.log("Respawn foxes.")
             for(let i = 0; i < 5; i++) this.spawnFox();
@@ -155,7 +154,7 @@ export class WorldSimulation {
         }
 
         // Травоядные
-        const rabbits = this.entities.rabbits;
+        /*const rabbits = this.entities.rabbits;
         for (let i = rabbits.length - 1; i >= 0; i--) {
             const rabbit = rabbits[i];
             try {
@@ -176,7 +175,7 @@ export class WorldSimulation {
                 console.error(`Fish update error:`, e);
                 fish.splice(i, 1);
             }
-        }
+        }*/
 
         this.updateEntityGroup(this.entities.algae);
         this.updateEntityGroup(this.entities.grass);
