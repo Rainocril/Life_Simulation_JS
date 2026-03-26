@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Симуляция жизни</title>
+    <link rel="stylesheet" href="css/index.css">
+
+    <script src="https://unpkg.com/gpu.js@2.10.4/dist/gpu-browser.min.js"></script>
+</head>
+<body>
+    <!-- SimpleNoise -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <!-- Random Seed -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/3.0.5/seedrandom.min.js"></script>
+    <!-- Tensorflow -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+
+    <script>
+        // Убедимся, что GPU определён
+        if (window.GPU && typeof window.GPU.GPU === 'function') {
+        const gpu = new window.GPU.GPU();
+        console.log('GPU.js успешно инициализирован');
+        } else {
+        console.error('GPU.js не загружен корректно или конструктор GPU не найден.');
+        }
+    </script>
+
+    <script>
+        class GPUManager {
+            constructor() {
+                this.availableGPUs = [];
+                this.selectedGPU = null;
+                this.detectAllGPUs();
+            }
+
+            detectAllGPUs() {
+                console.log('🔍 Активный поиск всех GPU...');
+                
+                // Создаем несколько canvas с разными настройками
+                const canvasConfigs = [
+                    { name: 'default', attributes: {} },
+                    { name: 'high-performance', attributes: { powerPreference: 'high-performance' } },
+                    { name: 'low-power', attributes: { powerPreference: 'low-power' } }
+                ];
+
+                const contextTypes = ['webgl', 'webgl2', 'experimental-webgl'];
+
+                // Тестируем все комбинации
+                contextTypes.forEach(contextType => {
+                    canvasConfigs.forEach(config => {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const context = canvas.getContext(contextType, config.attributes);
+                            
+                            if (context) {
+                                const debugInfo = context.getExtension('WEBGL_debug_renderer_info');
+                                if (debugInfo) {
+                                    const renderer = context.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                                    const vendor = context.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                                    
+                                    // Проверяем, не дубликат ли это
+                                    const isDuplicate = this.availableGPUs.some(gpu => 
+                                        gpu.renderer === renderer && gpu.vendor === vendor
+                                    );
+                                    
+                                    if (!isDuplicate) {
+                                        const gpuInfo = {
+                                            type: contextType,
+                                            config: config.name,
+                                            renderer: renderer,
+                                            vendor: vendor,
+                                            isDiscrete: this.isDiscreteGPU(renderer, vendor),
+                                            isNVIDIA: this.isNVIDIA(renderer, vendor)
+                                        };
+                                        
+                                        this.availableGPUs.push(gpuInfo);
+                                        console.log(`✅ ${contextType} (${config.name}): ${renderer}`, 
+                                            gpuInfo.isNVIDIA ? '🎮 NVIDIA!' : 
+                                            gpuInfo.isDiscrete ? '🎮 Discrete' : '💻 Integrated');
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            // Игнорируем ошибки
+                        }
+                    });
+                });
+            }
+
+            isNVIDIA(renderer, vendor) {
+                if (!renderer) return false;
+                const lower = renderer.toLowerCase();
+                return lower.includes('nvidia') || lower.includes('geforce') || 
+                    lower.includes('rtx') || lower.includes('gtx') || lower.includes('quadro');
+            }
+
+            isDiscreteGPU(renderer, vendor) {
+                if (!renderer) return false;
+                const lower = renderer.toLowerCase();
+                
+                // Интегрированные
+                if (lower.includes('intel') || lower.includes('vega') || 
+                    lower.includes('radeon graphics') || lower.includes('hd graphics')) {
+                    return false;
+                }
+                
+                // Дискретные
+                if (this.isNVIDIA(renderer, vendor) || 
+                    lower.includes('radeon rx') || lower.includes('radeon r9') ||
+                    lower.includes('amd radeon pro')) {
+                    return true;
+                }
+                
+                return false;
+            }
+
+            async forceNVIDIA() {
+                console.log('🚀 Попытка принудительного использования NVIDIA...');
+                
+                if (!window.GPU) {
+                    console.log('❌ GPU.js не загружен');
+                    return null;
+                }
+
+                // Способ 1: Пробуем разные режимы с принудительными настройками
+                const modes = ['webgl2', 'webgl', 'gpu'];
+                
+                for (const mode of modes) {
+                    try {
+                        console.log(`🔧 Пробуем режим: ${mode}`);
+                        const gpu = new window.GPU.GPU({ mode: mode });
+                        
+                        // Создаем стресс-тест чтобы "разбудить" дискретную карту
+                        const stressKernel = gpu.createKernel(function() {
+                            let sum = 0;
+                            for (let i = 0; i < 1000; i++) {
+                                sum += Math.sqrt(this.thread.x * this.thread.y + i) * Math.sin(i);
+                            }
+                            return sum;
+                        }).setOutput([512, 512]);
+                        
+                        // Запускаем стресс-тест
+                        stressKernel();
+                        
+                        // Проверяем, что используем
+                        const canvas = document.createElement('canvas');
+                        const gl = canvas.getContext('webgl');
+                        if (gl) {
+                            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                            if (debugInfo) {
+                                const currentRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                                console.log(`   Текущий рендерер: ${currentRenderer}`);
+                                
+                                if (this.isNVIDIA(currentRenderer)) {
+                                    console.log('✅ Успех! Используется NVIDIA GPU');
+                                    return gpu;
+                                }
+                            }
+                        }
+                        
+                    } catch (error) {
+                        console.log(`   ❌ Режим ${mode} не сработал:`, error.message);
+                    }
+                }
+                
+                console.log('⚠️ Не удалось переключиться на NVIDIA');
+                return new window.GPU.GPU(); // Fallback
+            }
+
+            async initializeBestGPU() {
+                console.log('📊 Найдено GPU:', this.availableGPUs.length);
+                
+                // Ищем NVIDIA
+                const nvidiaGPUs = this.availableGPUs.filter(gpu => gpu.isNVIDIA);
+                const discreteGPUs = this.availableGPUs.filter(gpu => gpu.isDiscrete && !gpu.isNVIDIA);
+                const integratedGPUs = this.availableGPUs.filter(gpu => !gpu.isDiscrete);
+                
+                console.log(`🎮 NVIDIA: ${nvidiaGPUs.length}`);
+                console.log(`🎮 Другие дискретные: ${discreteGPUs.length}`);
+                console.log(`💻 Интегрированные: ${integratedGPUs.length}`);
+
+                if (nvidiaGPUs.length > 0) {
+                    console.log('🚀 Обнаружена NVIDIA, пытаемся использовать...');
+                    this.selectedGPU = await this.forceNVIDIA();
+                } else if (discreteGPUs.length > 0) {
+                    console.log('⚠️ NVIDIA не найдена, используем другую дискретную карту');
+                    this.selectedGPU = await this.initializeGPUWithType(discreteGPUs[0].type);
+                } else if (integratedGPUs.length > 0) {
+                    console.log('💻 Используем интегрированную графику');
+                    this.selectedGPU = await this.initializeGPUWithType(integratedGPUs[0].type);
+                } else {
+                    console.log('❌ GPU не обнаружены');
+                    return null;
+                }
+                
+                return this.selectedGPU;
+            }
+
+            async initializeGPUWithType(type) {
+                try {
+                    const gpu = new window.GPU.GPU({ mode: type });
+                    console.log(`✅ GPU инициализирован: ${type}`);
+                    return gpu;
+                } catch (error) {
+                    console.log(`❌ Ошибка инициализации ${type}:`, error.message);
+                    return null;
+                }
+            }
+        }
+
+        // Запускаем поиск GPU
+        const gpuManager = new GPUManager();
+
+        setTimeout(async () => {
+            window.sharedGPU = await gpuManager.initializeBestGPU();
+            
+            if (window.sharedGPU) {
+                console.log('🎯 Финальный GPU:', window.sharedGPU.mode);
+                
+                // Финальная проверка
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl');
+                if (gl) {
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (debugInfo) {
+                        const finalRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                        console.log('🔍 Фактический рендерер:', finalRenderer);
+                        
+                        if (finalRenderer.toLowerCase().includes('nvidia')) {
+                            console.log('🎉 УСПЕХ! Используется NVIDIA GPU!');
+                        }
+                    }
+                }
+            }
+        }, 100);
+    </script>
+
+    <canvas id="hexCanvas"></canvas>
+    <canvas id="foxInfoCanvas"></canvas>
+    <canvas id="testCanvas"></canvas>
+
+    <div class="zoom-controls">
+        <button id="zoomOutBtn" class="zoom-btn">-</button>
+        <button id="zoomInBtn" class="zoom-btn">+</button>
+    </div>
+
+    <script type="module" src="js/index.js"></script>
+    
+</body>
+</html>
