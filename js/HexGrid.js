@@ -1,5 +1,5 @@
 import { ctx, offsetX, offsetY} from "./index.js";
-import { world } from "./WorldGenerator.js";
+import { world, WorldGenerator } from "./WorldGenerator.js";
 import { HexGeometryCache } from "./WorldGeometry.js";
 
 let offscreenCanvas = document.createElement('canvas');
@@ -9,7 +9,7 @@ let offscreenCtx = offscreenCanvas.getContext('2d');
 const circleCache = new Map();
 const smallHexagonCache = new Map();
 
-let colors = ['#1565C0', '#2196F3', '#FFEB3B', '#4CAF50', '#2E7D32', '#795548'];
+const colors = Object.values(WorldGenerator.TILE_TYPES).map(t => t.color);
 
 function drawHexagon(x, y, type, context) {
     context.save();

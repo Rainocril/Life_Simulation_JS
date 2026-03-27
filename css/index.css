@@ -68,3 +68,46 @@ canvas {
     background: rgba(30, 30, 40, 0.9);
     transform: none;
 }
+
+/* Стили для ControlPanel */
+#controlPanel::-webkit-scrollbar {
+    width: 8px;
+}
+
+#controlPanel::-webkit-scrollbar-track {
+    background: #222;
+    border-radius: 4px;
+}
+
+#controlPanel::-webkit-scrollbar-thumb {
+    background: #ff9800;
+    border-radius: 4px;
+}
+
+#controlPanel::-webkit-scrollbar-thumb:hover {
+    background: #ff5722;
+}
+
+/* Анимация для кнопок */
+#controlPanel button {
+    transition: all 0.2s ease;
+}
+
+#controlPanel input[type="range"] {
+    cursor: pointer;
+    background: #333;
+    height: 4px;
+    border-radius: 2px;
+}
+
+#controlPanel input[type="range"]:focus {
+    outline: none;
+}
+
+#controlPanel select {
+    cursor: pointer;
+}
+
+#controlPanel select:hover {
+    border-color: #ff5722;
+}

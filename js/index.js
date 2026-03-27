@@ -1,9 +1,10 @@
 import { drawHexagonGrid, drawCircle, drawSmallHexagon, drawVisionRange, drawHexagonV, drawAllVisionHexes, drawDistanceDebug} from "./HexGrid.js";
-import { ReGenerate, world } from "./WorldGenerator.js";
+import { ReGenerate, world, WorldGenerator, ReGenerateWithParams } from "./WorldGenerator.js";
 import { HexGeometryCache } from "./WorldGeometry.js";
 import { WorldSimulation } from './simulation.js';
 import { getHexNeighbors } from './HexUtils.js';
 import { Profiler } from './Profiler.js';
+import { ControlPanel } from './ControlPanel.js';
 
 import { FoxInfoDisplay } from "./Entity/FoxInfoDisplay.js";
 import { BrainShowLog } from "./Neurals/BrainStorage.js";
@@ -24,6 +25,32 @@ BrainShowLog(showLog);
 export let tick = 0;
 let totalTick = 0;
 let speed = 10;
+
+// Инициализация 3D визуализатора шума
+import { NoiseVisualizer3D } from './NoiseVisualizer3D.js';
+let noiseVisualizer = null;
+
+function initNoiseVisualizer() {
+    if (!noiseVisualizer) {
+        noiseVisualizer = new NoiseVisualizer3D('noiseVisualizer', 320, 280);
+        noiseVisualizer.hide();
+    }
+    // Передаем текущий мир для визуализации
+    if (world && world.length > 0) {
+        noiseVisualizer.updateWorld(world, world.length, world[0].length, {
+            showRiver: true
+        });
+    }
+}
+
+// Вызываем после генерации мира
+function onWorldGenerated() {
+    if (noiseVisualizer) {
+        noiseVisualizer.updateWorld(world, world.length, world[0].length);
+    }
+}
+
+
 
 // Функция проверки препятствий
 const isObstacle = (x, y) => {
@@ -148,10 +175,18 @@ export let SortTest =0;
 let VisionType = 0;
 let GridType = 0;
 
+let controlPanel = null;
+
 document.addEventListener('keydown', function(event) {
     //console.log(event.code)
-    if (event.code === 'Space') {
-        ReGenerate(xGrid, yGrid);
+        if (event.code === 'Space') {
+                if (controlPanel && controlPanel.isVisible) {
+            // Если панель открыта, используем текущие параметры
+            ReGenerateWithParams(xGrid, yGrid, params);
+        } else {
+            // Иначе используем стандартную генерацию
+            ReGenerate(xGrid, yGrid);
+        }
         temp_xGrid = xGrid;
         temp_yGrid = yGrid;
         if(simulation) {
@@ -162,6 +197,10 @@ document.addEventListener('keydown', function(event) {
             if (window.foxInfoDisplay) {
                 window.foxInfoDisplay.foxes.clear();
             }
+        }
+
+        if (noiseVisualizer) {
+            noiseVisualizer.updateWorld(world, world.length, world[0].length);
         }
     }
     if (event.code === 'KeyP') {
@@ -282,6 +321,45 @@ document.addEventListener('keydown', function(event) {
             }
             default : {GridType = 0; toggleDebugGrid(); break;}
         }
+    }
+
+    if (event.code === 'KeyM') {
+        noiseVisualizer.toggle();
+        if (!controlPanel) {
+            // Создаем панель с колбэком регенерации
+            controlPanel = new ControlPanel((params) => {
+                // Останавливаем симуляцию если работает
+                if (simulation) {
+                    simulation.isSimulationRunning = false;
+                    simulation = null;
+                    tick = 0;
+                    if (window.foxInfoDisplay) {
+                        window.foxInfoDisplay.foxes.clear();
+                    }
+                }
+                
+                // Регенерируем мир с новыми параметрами
+                ReGenerateWithParams(xGrid, yGrid, params);
+                
+                // Обновляем 3D визуализатор
+                if (noiseVisualizer) {
+                    noiseVisualizer.updateWorld(world, world.length, world[0].length);
+                }
+            });
+        }
+        
+        // Если симуляция работает - останавливаем
+        if (simulation) {
+            simulation.isSimulationRunning = false;
+            simulation = null;
+            tick = 0;
+            if (window.foxInfoDisplay) {
+                window.foxInfoDisplay.foxes.clear();
+            }
+            controlPanel.setSimulationStatus(false);
+        }
+        
+        controlPanel.toggle();
     }
 });
 
@@ -526,4 +604,5 @@ function initZoomControls() {
 resizeCanvas()
 ReGenerate(xGrid, yGrid);
 initZoomControls();
+initNoiseVisualizer();
 simulationLoop();

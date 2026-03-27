@@ -22,7 +22,6 @@ export function getHexNeighbors(x, y) {
         .filter(n => n.x >= 0 && n.y >= 0 && n.x < cols && n.y < rows);
 }
 
-// Если нужны все соседи (включая за границами)
 export function getAllHexNeighbors(x, y) {
     const parity = x % 2 === 0 ? 'even' : 'odd';
 

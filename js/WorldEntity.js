@@ -152,13 +152,13 @@ export class WorldEntity {
         }
     }
 }
+
 export class Entity extends WorldEntity {
     constructor(x, y, world) {
         super(x, y, world);
         this.energy = 100;
         this.health = 100;
         this.age = 0;
-        this.visionRange = 3;
     }
 
     executeAction(action) {
