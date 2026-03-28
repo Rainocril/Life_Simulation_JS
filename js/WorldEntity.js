@@ -817,49 +817,9 @@ export class Entity extends WorldEntity {
                 return this.getFallbackAction();
             }
             
-            /* !!!
-            let output;
-            if (this.brain.predictDual) {
-                // Используем СИНХРОННУЮ версию для двухпоточного predict
-                output = this.brain.predictSync(basicState, visionInput);
-            } else if (this.brain.predictSingle) {
-                // Старый predict для обратной совместимости
-                const combinedInput = [...basicState, ...visionInput];
-                output = this.brain.predictSingleSync(combinedInput);
-            } else {
-                // Запасной вариант
-                output = new Array(10).fill(0.1);
-            }
-            */
-
-            //const explorationRate = Math.max(0.01, 0.4 - this.age / 800);
-            //!!!
-            const explorationRate = 2;
-
-            // Исследование
-            if (Math.random() < explorationRate) {
-                return this.getRandomAction();
-            }
-
-            /*/ Или softmax с температурой
-            const temperature = 1.5; // Увеличивает разнообразие
-            const tempered = prediction.map(p => Math.exp(p / temperature));
-            const sum = tempered.reduce((a, b) => a + b, 0);
-            const probabilities = tempered.map(p => p / sum);
-            
-            // Исследование
-            // Выбор действия на основе вероятностей
-            let random = Math.random();
-            for (let i = 0; i < probabilities.length; i++) {
-                random -= probabilities[i];
-                if (random <= 0) return this.getActionByIndex(i);
-            }*/
-
-            // Эксплуатация
-            const actionIndex = output.indexOf(Math.max(...output));
+            const actionIndex = this.rlAgent.decideAction(basicState, visionInput);
             this.lastActionId = actionIndex;
-            return this.getActionByIndex(actionIndex);
-            
+            return this.getActionByIndex(actionIndex);      
         } catch (e) {
             console.error('Decision failed:', e);
             return this.getFallbackAction();

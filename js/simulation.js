@@ -142,16 +142,20 @@ export class WorldSimulation {
 
         // Обновляем сущности группами
         // Хищники
+        Profiler.start('updateFoxes');
         const foxes = this.entities.foxes;
         for (let i = foxes.length - 1; i >= 0; i--) {
             const fox = foxes[i];
+            Profiler.start('updateOneFox')
             try {
                 await fox.update();
             } catch (e) {
                 console.error(`Fox update error:`, e);
                 foxes.splice(i, 1);
             }
+            Profiler.end('updateOneFox')
         }
+        Profiler.end('updateFoxes');
 
         // Травоядные
         /*const rabbits = this.entities.rabbits;

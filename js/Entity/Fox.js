@@ -6,6 +6,8 @@ import { getHexNeighbors} from "../HexUtils.js";
 import { LineOfSight } from "../LineOfSight.js";
 
 import { NeuralNetwork, DualStreamNeuralNetwork } from "../Neurals/Neural.js";
+import { TensorFlowRLAgent } from '../Neurals/TensorFlowRLAgent.js';
+import { bestBrainsManager } from '../Neurals/BestBrainsManager.js';
 
 let foxCounter = 0;
 
@@ -40,7 +42,7 @@ export class Fox extends Entity {
 
         // Входные данные нейронки
         this.hexCount = 1 + 3 * this.visionRange * (this.visionRange + 1);
-        this.basicInputSize = 9;
+        this.basicInputSize = 8;
         this.visionInputSize = this.hexCount * 3; // 183
         this.totalActions = 10;
 
@@ -65,15 +67,22 @@ export class Fox extends Entity {
         };
 
         //console.log(`Fox: basic=${basicInputSize}, vision=${visionInputSize}, total=${basicInputSize + visionInputSize}`);
-        
-        Profiler.start('fox_loadBrain');
-        this.brain = this.loadBrain();
-        Profiler.end('fox_loadBrain');
-
         this.resourceMemory = [];
         this.memoryDecay = 0.99;
 
         this.logFoxInfo();
+
+        // Создаем TensorFlow агента (все параметры внутри)
+        this.rlAgent = new TensorFlowRLAgent(
+            this.basicInputSize,
+            this.visionInputSize,
+            this.totalActions
+        );
+
+        /*Profiler.start('fox_loadBrain');
+        this.brain = this.loadBrain();
+        Profiler.end('fox_loadBrain');*/
+
         Profiler.end('fox_constructor');
     }
 
@@ -98,7 +107,6 @@ export class Fox extends Entity {
             (100 - this.hunger) / 100,  // Голод
             (100 - this.thirst) / 100,  // Жажда
             this.age / 1000,    // Возраст
-            hexType,     // Тип текущей клетки
             entities.rabbits.length > 0 ? 1 : 0,
             entities.fish.length > 0 ? 1 : 0,
             entities.foxes ? (entities.foxes.length > 0 ? 1 : 0) : 0
@@ -443,7 +451,7 @@ export class Fox extends Entity {
         return -600;
     }
 
-    reproduce() {
+    async reproduce() {
         const canReproduce = 
             this.reproductionCooldown <= 0 &&
             this.energy > 50 &&
@@ -470,24 +478,25 @@ export class Fox extends Entity {
         const childrenCount = Math.min(availableSpots.length, 3);
         const parentPortion = 1 / (childrenCount + 1);
 
-        availableSpots.slice(0, childrenCount).forEach(([dx, dy]) => {
+        for (const [dx, dy] of availableSpots.slice(0, childrenCount)) {
             const newX = this.x + dx;
             const newY = this.y + dy;
             
             const fox = new Fox(newX, newY, this.world);
-            try {
+
+            /*try {
                 fox.brain = this.cloneBrain();
                 fox.brain.mutate(0.2);
             } catch (e) {
                 console.error('Clone Error');
                 fox.brain = new DualStreamNeuralNetwork(this.basicInputSize, this.visionInputSize, this.totalActions);
-            }
+            }*/
             
             fox.hunger = this.hunger * parentPortion;
             fox.thirst = this.thirst * parentPortion;
             
             this.world.entities.foxes.push(fox);
-        });
+        };
 
         this.hunger *= parentPortion;
         this.thirst *= parentPortion;
@@ -497,12 +506,12 @@ export class Fox extends Entity {
         return 500 + (childrenCount * 10);
     }
 
-    die() {
+    async die() {
         Profiler.start('fox_die');
-        Profiler.start('fox_saveBrain');
+        /*Profiler.start('fox_saveBrain');
         this.saveBrain();
-        Profiler.end('fox_saveBrain');
-
+        Profiler.end('fox_saveBrain');*/
+    
         try {
             const foxes = this.world.entities.foxes;
             const index = foxes.indexOf(this);  
@@ -545,6 +554,7 @@ export class Fox extends Entity {
 
         if (this.reproductionCooldown > 0) this.reproductionCooldown--;
 
+        // Проверка смерти.
         if (this.health <= 0 || this.age / 360 > 10 || 
             (this.world.isDeepWater(this.x, this.y) && 
             this.energy <= 6)) {
@@ -553,19 +563,21 @@ export class Fox extends Entity {
         }
         
         reward += actionReward;
+
         Profiler.start('fox_normalizeStats');
         this.normalizeStats();
         Profiler.end('fox_normalizeStats');
-        this.tempReward = reward;
-        const firstReward = reward;
-        
-        // Получение состояния ПОСЛЕ действия
+
+        // Получение состояния после действия
         Profiler.start('fox_getValidatedState');
         const nextState = this.getValidatedState();
         Profiler.end('fox_getValidatedState');
+
+        this.tempReward = reward;
+        const firstReward = reward;
         
         // Передаем гарантированно валидные состояния
-        Profiler.start('fox_remember');
+        /*Profiler.start('fox_remember');
         this.remember(this.lastState, action.actionIndex ?? 6, reward, nextState, action.type);
         Profiler.end('fox_remember');
 
@@ -582,9 +594,26 @@ export class Fox extends Entity {
         });
         this.resourceMemory = this.resourceMemory.filter(m => m.timestamp > 0.1);
     
-        this.lastAction = action.type;
+        this.lastAction = action.type;*/
 
-        if(this.isDead) return this.die();
+        // Запоминаем опыт через TensorFlow агента
+        this.rlAgent.remember(
+            this.lastState,
+            action.actionIndex,
+            reward,
+            nextState,
+            this.isDead
+        );
+
+        this.lastState = nextState;
+        this.lastAction = action.type;
+        
+        // Асинхронное обучение
+        this.rlAgent.trainSync(8);
+
+        if(this.isDead) {
+            return this.die();
+        }
     }
 
     normalizeStats() {
